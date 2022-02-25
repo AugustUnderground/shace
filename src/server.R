@@ -72,6 +72,10 @@ server <- function(input, output, session) {
     output$pick_eps <- renderUI({
         if (! is.null(env$performance)) {
             pickerInput( inputId = "pick_episode"
+                       , selected = ifelse( !is.null(env$performance)
+                                          , tail( env$performance()[["episode"]]
+                                                , n = 1)
+                                          , NULL )
                        , label = "Select Episodes:"
                        , choices = unique(env$performance()[["episode"]])
                        , options = list( `actions-box` = TRUE
