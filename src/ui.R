@@ -43,8 +43,7 @@ home_tab <- tabItem( "tab_home"
                         , verbatimTextOutput("text_file") )
                         )
 
-target_tab <- tabItem( "tab_target"
-                                  , uiOutput("plots_target"))
+target_tab <- tabItem( "tab_target", uiOutput("plots_target"))
 
 op_tab <- tabItem("tab_op", uiOutput("plots_op"))
 
@@ -63,7 +62,7 @@ header <- dashboardHeader( title = "SHACE"
 sidebar <- dashboardSidebar(sidebarMenu( id = "tabs"
                                        , home_menu, target_menu, op_menu
                                        , sizing_menu, env_menu, report_menu
-                                       , license_menu 
+                                       , license_menu
                                        , eps_pick, intervall_num
                                        , refresh_button ))
 

@@ -47,11 +47,15 @@ server <- function(input, output, session) {
                         , sep = "/" )
 
         env_performance_data <- paste(env$dir, "performance.ft", sep = "/")
+        env_environment_data <- paste(env$dir, "environment.ft", sep = "/")
         env_sizing_data      <- paste(env$dir, "sizing.ft",      sep = "/")
         env_target_data      <- paste(env$dir, "target.ft",      sep = "/")
 
         env$performance <<- reactiveFileReader( intervall(), session
                                               , env_performance_data
+                                              , env_data_reader )
+        env$environment <<- reactiveFileReader( intervall(), session
+                                              , env_environment_data
                                               , env_data_reader )
         env$sizing      <<- reactiveFileReader( intervall(), session
                                               , env_sizing_data
@@ -60,6 +64,7 @@ server <- function(input, output, session) {
                                               , env_target_data
                                               , env_data_reader )
         status <- ifelse( (!is.null(env$performance))
+                       && (!is.null(env$environment))
                        && (!is.null(env$sizing))
                        && (!is.null(env$target))
                         , "success", "danger" )
@@ -88,7 +93,6 @@ server <- function(input, output, session) {
     observeEvent(input$button_refresh, update_env_selection())
 
     output$text_file <- renderText(paste0("DEBUG | Selected Dir :", env$dir))
-
 
     output$plots_target <- renderUI({
         if ((! is.null(env$target)) && (! is.null(env$performance))) {
@@ -133,6 +137,51 @@ server <- function(input, output, session) {
                                           , paper_bgcolor = "rgb(255,255,255)"
                                           , plot_bgcolor  = "rgb(229,229,229)"
                                           , shapes = list(tgt)
+                                          , xaxis = c( list(title = "Step")
+                                                     , axis_defaults )
+                                          , yaxis = c( list( title = param)
+                                                     , axis_defaults))
+                        })
+                    })
+                }
+            }
+        }
+    })
+
+    output$plots_op <- renderUI({
+        if (! is.null(env$performance)) {
+            pd <- env$performance()
+            pp <- Filter(function(p) {
+                        (is.element(":gmoverid", p) || is.element(":fug", p))
+                    }, colnames(pd))
+            plot_list <- lapply(pp, function(p) {
+                                        plotlyOutput(gsub(":", "_", p))
+                                    })
+            do.call(tagList, plot_list)
+        }
+    })
+
+    observe({
+        if (! is.null(env$performance)) {
+            pd <- env$performance()
+            for (p in colnames(pd)) {
+                if ((p != "episode") && (is.element(":gmoverid", p)
+                                     || is.element(":fug", p))) {
+                    local({
+                        param <- p
+                        output[[gsub(":", "_", p)]] <- renderPlotly({
+                            fig <- plot_ly()
+                            for (eps in input$pick_episode) {
+                                x <- pd[pd$episode == eps, ][["step"]]
+                                y <- pd[pd$episode == eps, ][[param]]
+                                n <- paste("Episode", eps)
+                                l <- list(shape = "linear")
+                                fig <- fig %>% add_lines( x = x, y = y
+                                                        , name = n, line = l )
+                            }
+                            fig %>% layout( title = param
+                                          , paper_bgcolor = "rgb(255,255,255)"
+                                          , plot_bgcolor  = "rgb(229,229,229)"
                                           , xaxis = c( list(title = "Step")
                                                      , axis_defaults )
                                           , yaxis = c( list( title = param)
@@ -190,35 +239,33 @@ server <- function(input, output, session) {
 #pd <- read_feather("/tmp/uhlmanny/gace/20220225-143459-pool/env_0/performance.ft", as_data_frame = TRUE)
 
     output$plots_env <- renderUI({
-        if (! is.null(env$performance)) {
-            pd <- env$performance()
-            pp <- Filter(  function(p) {(p != "episode") && (p != "step")}
-                        , colnames(pd)[grepl("^[[:lower:]].", colnames(pd))] )
-            plot_list <- lapply(pp, function(p) {
-                                        plotlyOutput(paste0(p, "_performance"))
+        if (! is.null(env$environment)) {
+            ed <- env$environment()
+            ep <- Filter(  function(p) {(p != "episode") && (p != "step")}
+                        , colnames(ed) )
+            plot_list <- lapply(ep, function(p) {
+                                        plotlyOutput(p)
                                     })
             do.call(tagList, plot_list)
         }})
 
     observe({
-        if (! is.null(env$performance)) {
-            pd <- env$performance()
-            for (p in colnames(pd)) {
-                if (p != "episode") {
+        if (! is.null(env$environment)) {
+            ed <- env$environment()
+            for (p in colnames(ed)) {
+                if ((p != "episode") && (p != "step")) {
                     local({
                         param <- p
-                        output[[paste0(param, "_performance")]] <- renderPlotly({
+                        output[[param]] <- renderPlotly({
                             fig <- plot_ly()
                             for (eps in input$pick_episode) {
-                                x <- sd[pd$episode == eps, ][["step"]]
-                                y <- pd[pd$episode == eps, ][[param]]
+                                x <- ed[ed$episode == eps, ][["step"]]
+                                y <- ed[ed$episode == eps, ][[param]]
                                 n <- paste("Episode", eps)
                                 l <- list(shape = "linear")
                                 fig <- fig %>% add_lines( x = x, y = y
                                                         , name = n
                                                         , line = l )
-                                #fig <- fig %>% add_lines( y = y, name = n
-                                #  , line = list(shape = "spline"))
                             }
                             fig %>% layout( title = param
                                           , paper_bgcolor = "rgb(255,255,255)"
