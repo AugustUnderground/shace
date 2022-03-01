@@ -139,7 +139,7 @@ server <- function(input, output, session) {
                                           , shapes = list(tgt)
                                           , xaxis = c( list(title = "Step")
                                                      , axis_defaults )
-                                          , yaxis = c( list( title = param)
+                                          , yaxis = c( list(title = param)
                                                      , axis_defaults))
                         })
                     })
@@ -152,7 +152,8 @@ server <- function(input, output, session) {
         if (! is.null(env$performance)) {
             pd <- env$performance()
             pp <- Filter(function(p) {
-                        (is.element(":gmoverid", p) || is.element(":fug", p))
+                            ((p != "episode") && (p != "step")
+                          && (grepl(":gmoverid", p) || grepl(":fug", p)))
                     }, colnames(pd))
             plot_list <- lapply(pp, function(p) {
                                         plotlyOutput(gsub(":", "_", p))
@@ -165,11 +166,11 @@ server <- function(input, output, session) {
         if (! is.null(env$performance)) {
             pd <- env$performance()
             for (p in colnames(pd)) {
-                if ((p != "episode") && (is.element(":gmoverid", p)
-                                     || is.element(":fug", p))) {
+                if ((p != "episode") && (p != "step")
+                 && (grepl(":gmoverid", p) || grepl(":fug", p))) {
                     local({
                         param <- p
-                        output[[gsub(":", "_", p)]] <- renderPlotly({
+                        output[[gsub(":", "_", param)]] <- renderPlotly({
                             fig <- plot_ly()
                             for (eps in input$pick_episode) {
                                 x <- pd[pd$episode == eps, ][["step"]]
@@ -236,7 +237,7 @@ server <- function(input, output, session) {
         }
     })
 
-#ed <- read_feather("/tmp/uhlmanny/gace/20220228-131001-pool/env_11/environment.ft", as_data_frame = TRUE)
+#pd <- read_feather("/tmp/uhlmanny/gace/20220228-131001-pool/env_11/performance.ft", as_data_frame = TRUE)
 
     output$plots_env <- renderUI({
         if (! is.null(env$environment)) {
