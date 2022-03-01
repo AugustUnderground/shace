@@ -236,13 +236,12 @@ server <- function(input, output, session) {
         }
     })
 
-#pd <- read_feather("/tmp/uhlmanny/gace/20220225-143459-pool/env_0/performance.ft", as_data_frame = TRUE)
+#ed <- read_feather("/tmp/uhlmanny/gace/20220228-131001-pool/env_11/environment.ft", as_data_frame = TRUE)
 
     output$plots_env <- renderUI({
         if (! is.null(env$environment)) {
             ed <- env$environment()
-            ep <- Filter(  function(p) {(p != "episode") && (p != "step")}
-                        , colnames(ed) )
+            ep <- c("reward_episode", "reward_mean", "reward_total")
             plot_list <- lapply(ep, function(p) {
                                         plotlyOutput(p)
                                     })
@@ -252,32 +251,46 @@ server <- function(input, output, session) {
     observe({
         if (! is.null(env$environment)) {
             ed <- env$environment()
-            for (p in colnames(ed)) {
-                if ((p != "episode") && (p != "step")) {
-                    local({
-                        param <- p
-                        output[[param]] <- renderPlotly({
-                            fig <- plot_ly()
-                            for (eps in input$pick_episode) {
-                                x <- ed[ed$episode == eps, ][["step"]]
-                                y <- ed[ed$episode == eps, ][[param]]
-                                n <- paste("Episode", eps)
-                                l <- list(shape = "linear")
-                                fig <- fig %>% add_lines( x = x, y = y
-                                                        , name = n
-                                                        , line = l )
-                            }
-                            fig %>% layout( title = param
-                                          , paper_bgcolor = "rgb(255,255,255)"
-                                          , plot_bgcolor  = "rgb(229,229,229)"
-                                          , xaxis = c( list(title = "Step")
-                                                     , axis_defaults )
-                                          , yaxis = c( list( title = param)
-                                                     , axis_defaults))
-                        })
-                    })
+
+            output$reward_episode <- renderPlotly({
+                fig <- plot_ly()
+                for (eps in input$pick_episode) {
+                    x <- ed[ed$episode == eps, ][["step"]]
+                    r <- ed[ed$episode == eps, ][["reward"]]
+                    n <- paste("Episode", eps)
+                    l <- list(shape = "linear")
+                    fig <- fig %>% add_lines(x = x, y = r, name = n, line = l)
                 }
-            }
+                fig %>% layout( title = "Step Reward"
+                              , paper_bgcolor = "rgb(255,255,255)"
+                              , plot_bgcolor  = "rgb(229,229,229)"
+                              , xaxis = c(list(title = "Step"), axis_defaults)
+                              , yaxis = c(list( title = "Reward"), axis_defaults) )
+            })
+            output$reward_total <- renderPlotly({
+                ag <- aggregate(ed$reward, list(ed$episode), FUN=sum)
+                e <- ag$Group.1
+                r <- ag$x
+                fig <- plot_ly( x = e, y = r, name = "Total Reward / Episode"
+                             , line = list(shape = "linear"))
+                fig %>% layout( title = "Total Reward per Episode"
+                              , paper_bgcolor = "rgb(255,255,255)"
+                              , plot_bgcolor  = "rgb(229,229,229)"
+                              , xaxis = c(list(title = "Step"), axis_defaults)
+                              , yaxis = c(list( title = "Reward"), axis_defaults) )
+            })
+            output$reward_mean <- renderPlotly({
+                ag <- aggregate(ed$reward, list(ed$episode), FUN=mean)
+                e <- ag$Group.1
+                r <- ag$x
+                fig <- plot_ly( x = e, y = r, name = "Average Reward / Episode"
+                             , line = list(shape = "linear"))
+                fig %>% layout( title = "Average Reward per Episode"
+                              , paper_bgcolor = "rgb(255,255,255)"
+                              , plot_bgcolor  = "rgb(229,229,229)"
+                              , xaxis = c(list(title = "Step"), axis_defaults)
+                              , yaxis = c(list( title = "Reward"), axis_defaults) )
+            })
         }
     })
 }
