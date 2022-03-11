@@ -7,7 +7,10 @@ server <- function(input, output, session) {
     })
 
     output$env_selector <- renderUI({
-        envs <- list.files(paste(args$dir, input$select_run, sep = "/"))
+        envs <- Filter( function(f) {grepl("env_", f)} 
+                      , list.files(paste( args$dir
+                                        , input$select_run
+                                        , sep = "/")))
         selectInput("select_env", label = "Select Environment", choices = envs)
     })
 
@@ -18,8 +21,9 @@ server <- function(input, output, session) {
     })
 
     output$info_envs <- renderValueBox({
-        num_envs <- length(list.files(paste( args$dir
-                                           , input$select_run, sep = "/")))
+        num_envs <- length( Filter( function(f) {grepl("env_", f)} 
+                                  , list.files(paste( args$dir
+                                           , input$select_run, sep = "/"))))
         valueBox( num_envs, "Environments"
                 , icon = icon("globe"), color = "light-blue")
     })
@@ -32,7 +36,9 @@ server <- function(input, output, session) {
     env <- reactiveValues( dir = ""
                          , performance = NULL
                          , target = NULL
-                         , sizing = NULL )
+                         , sizing = NULL 
+                         , loss = NULL
+                         , reward = NULL )
 
     observe({
         intervall <<- reactiveVal(input$num_intervall * 1000)
@@ -42,14 +48,21 @@ server <- function(input, output, session) {
         read_feather(file_path, as_data_frame = TRUE)
     }
 
+    mdl_data_reader <- function(file_path) {
+        read.csv(file_path, header = TRUE, sep = ",")
+    }
+
     update_env_selection <- function() {
         env$dir <- paste( args$dir, input$select_run, input$select_env
                         , sep = "/" )
+        mdl_dir <- paste(args$dir, input$select_run, "model", sep = "/")
 
         env_performance_data <- paste(env$dir, "performance.ft", sep = "/")
         env_environment_data <- paste(env$dir, "environment.ft", sep = "/")
         env_sizing_data      <- paste(env$dir, "sizing.ft",      sep = "/")
         env_target_data      <- paste(env$dir, "target.ft",      sep = "/")
+        mdl_loss_data        <- paste(mdl_dir, "loss.csv",       sep = "/")
+        mdl_reward_data      <- paste(mdl_dir, "reward.csv",     sep = "/")
 
         env$performance <<- reactiveFileReader( intervall(), session
                                               , env_performance_data
@@ -63,6 +76,14 @@ server <- function(input, output, session) {
         env$target      <<- reactiveFileReader( intervall(), session
                                               , env_target_data
                                               , env_data_reader )
+
+        env$loss        <<- reactiveFileReader( intervall(), session
+                                              , mdl_loss_data
+                                              , mdl_data_reader )
+        env$reward      <<- reactiveFileReader( intervall(), session
+                                              , mdl_reward_data
+                                              , mdl_data_reader )
+
         status <- ifelse( (!is.null(env$performance))
                        && (!is.null(env$environment))
                        && (!is.null(env$sizing))
@@ -237,8 +258,6 @@ server <- function(input, output, session) {
         }
     })
 
-#pd <- read_feather("/tmp/uhlmanny/gace/20220228-131001-pool/env_11/performance.ft", as_data_frame = TRUE)
-
     output$plots_env <- renderUI({
         if (! is.null(env$environment)) {
             ed <- env$environment()
@@ -292,6 +311,60 @@ server <- function(input, output, session) {
                               , xaxis = c(list(title = "Step"), axis_defaults)
                               , yaxis = c(list( title = "Reward"), axis_defaults) )
             })
+        }
+    })
+
+#md <- read_feather("/tmp/uhlmanny/gace/20220228-131001-pool/env_11/performance.ft", as_data_frame = TRUE)
+#ld <- read.csv("/tmp/uhlmanny/gace/20220311-140325-pool/model/loss.csv", header = TRUE, sep = ",")
+#rd <- read.csv("/tmp/uhlmanny/gace/20220311-140325-pool/model/reward.csv", header = TRUE, sep = ",")
+
+    output$plots_mdl <- renderUI({
+        if ((! is.null(env$loss)) && (! is.null(env$reward))) {
+            ld <- env$loss()
+            mp <- c( lapply(unique(ld$Model), function(l) {paste0("loss_",l)})
+                   , "reward", "total" )
+
+            plot_list <- lapply(mp, function(p) { plotlyOutput(p) })
+
+            do.call(tagList, plot_list)
+        }})
+
+    observe({
+        if ((! is.null(env$loss)) && (! is.null(env$reward))) {
+            ld <- env$loss()
+            rd <- env$reward()
+
+            #lp <- lapply(unique(ld$Model), function(l) {paste0("loss_", l)})
+            lp <- unique(ld$Model)
+
+            for (p in lp) {
+                local({
+                    param <- p
+                    t <- paste(param, "Loss")
+                    output[[paste0("loss_", param)]] <- renderPlotly({
+                        fig <- plot_ly()
+                        #for (eps in input$pick_episode) {
+                        for (eps in unique(ld$Episode)) {
+                            x <- ld[ ((ld$Episode == eps) & (ld$Model == param))
+                                   , ][["Iteration"]]
+                            y <- ld[ ((ld$Episode == eps) & (ld$Model == param))
+                                   , ][["Loss"]]
+                            n <- paste("Episode", eps)
+                            l <- list(shape = "linear")
+                            fig <- fig %>% add_lines( x = x, y = y
+                                                    , name = n
+                                                    , line = l )
+                        }
+                        fig %>% layout( title = param
+                                      , paper_bgcolor = "rgb(255,255,255)"
+                                      , plot_bgcolor  = "rgb(229,229,229)"
+                                      , xaxis = c( list(title = "Iteration")
+                                                 , axis_defaults )
+                                      , yaxis = c( list(title = t)
+                                                 , axis_defaults))
+                    })
+                })
+            }
         }
     })
 }
