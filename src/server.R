@@ -45,7 +45,7 @@ server <- function(input, output, session) {
     })
 
     env_data_reader <- function(file_path) {
-        read_feather(file_path, as_data_frame = TRUE)
+        read.csv(file_path, header = TRUE, sep = ",")
     }
 
     mdl_data_reader <- function(file_path) {
@@ -57,12 +57,12 @@ server <- function(input, output, session) {
                         , sep = "/" )
         mdl_dir <- paste(args$dir, input$select_run, "model", sep = "/")
 
-        env_performance_data <- paste(env$dir, "performance.ft", sep = "/")
-        env_environment_data <- paste(env$dir, "environment.ft", sep = "/")
-        env_sizing_data      <- paste(env$dir, "sizing.ft",      sep = "/")
-        env_target_data      <- paste(env$dir, "target.ft",      sep = "/")
-        mdl_loss_data        <- paste(mdl_dir, "loss.csv",       sep = "/")
-        mdl_reward_data      <- paste(mdl_dir, "reward.csv",     sep = "/")
+        env_performance_data <- paste(env$dir, "performance.csv", sep = "/")
+        env_environment_data <- paste(env$dir, "environment.csv", sep = "/")
+        env_sizing_data      <- paste(env$dir, "sizing.csv",      sep = "/")
+        env_target_data      <- paste(env$dir, "target.csv",      sep = "/")
+        mdl_loss_data        <- paste(mdl_dir, "loss.csv",        sep = "/")
+        mdl_reward_data      <- paste(mdl_dir, "reward.csv",      sep = "/")
 
         env$performance <<- reactiveFileReader( intervall(), session
                                               , env_performance_data
@@ -77,12 +77,17 @@ server <- function(input, output, session) {
                                               , env_target_data
                                               , env_data_reader )
 
-        env$loss        <<- reactiveFileReader( intervall(), session
-                                              , mdl_loss_data
-                                              , mdl_data_reader )
-        env$reward      <<- reactiveFileReader( intervall(), session
-                                              , mdl_reward_data
-                                              , mdl_data_reader )
+        if (file.exists(mdl_loss_data) && file.exists(mdl_reward_data)) {
+            env$loss        <<- reactiveFileReader( intervall(), session
+                                                  , mdl_loss_data
+                                                  , mdl_data_reader )
+            env$reward      <<- reactiveFileReader( intervall(), session
+                                                  , mdl_reward_data
+                                                  , mdl_data_reader )
+        } else {
+            env$loss   <<- NULL
+            env$reward <<- NULL
+        }
 
         status <- ifelse( (!is.null(env$performance))
                        && (!is.null(env$environment))
@@ -313,10 +318,6 @@ server <- function(input, output, session) {
             })
         }
     })
-
-#md <- read_feather("/tmp/uhlmanny/gace/20220228-131001-pool/env_11/performance.ft", as_data_frame = TRUE)
-#ld <- read.csv("/tmp/uhlmanny/gace/20220311-140325-pool/model/loss.csv", header = TRUE, sep = ",")
-#rd <- read.csv("/tmp/uhlmanny/gace/20220311-140325-pool/model/reward.csv", header = TRUE, sep = ",")
 
     output$plots_mdl <- renderUI({
         if ((! is.null(env$loss)) && (! is.null(env$reward))) {
