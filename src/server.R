@@ -33,6 +33,9 @@ server <- function(input, output, session) {
                          , tickcolor = 'rgb(127,127,127)', ticks = "outside"
                          , zeroline = FALSE )
 
+    palette <- brewer.pal(n = 8, name = "Dark2")
+    #palette <- rep(brewer.pal(n = 8, name = "Dark2"), each = 2)
+
     env <- reactiveValues( dir = ""
                          , performance = NULL
                          , target = NULL
@@ -140,33 +143,46 @@ server <- function(input, output, session) {
                     local({
                         param <- p
                         output[[paste0(param, "_target")]] <- renderPlotly({
-                            tgt <- list( type = "line"
-                                       , x0 = 0, x1 = 1
-                                       , xref = "paper"
-                                       , y0 = td[[param]]
-                                       , y1 = td[[param]]
-                                       , line =  list( shape = "linear"
-                                                     , color = "black"
-                                                     , dash = "dot" ))
                             fig <- plot_ly()
+
                             for (eps in input$pick_episode) {
+                                e <- strtoi(eps)
+                                tc <- palette[((e %% 8) + 1)]
                                 x <- pd[pd$episode == eps, ][["step"]]
                                 y <- pd[pd$episode == eps, ][[param]]
+                                l <- loess(y~x, span = 0.5)
                                 n <- paste("Episode", eps)
-                                l <- list(shape = "linear")
-                                fig <- fig %>% add_lines( x = x, y = y
-                                                        , name = n, line = l )
-                                #fig <- fig %>% add_lines( y = y, name = n
-                                #  , line = list(shape = "spline"))
+                                fig <- fig %>% add_trace( x = x, y = y
+                                                        , color = tc
+                                                        , name = n
+                                                        , colors = c()
+                                                        , type = "scatter"
+                                                        , mode = "markers" )
+                                fig <- fig %>% add_trace( x = x, y = predict(l)
+                                                        , color = tc
+                                                        , name = n
+                                                        , colors = c()
+                                                        , type = "scatter"
+                                                        , mode = "line" )
+                                ty <- rep( td[td$episode == eps, ][[param]]
+                                         , length(x) )
+
+                                fig <- fig %>% add_trace( x = x, y = ty
+                                                        , type = "scatter"
+                                                        , color = tc
+                                                        , line = list( width = 2
+                                                                     , dash = "dash" )
+                                                        , name = paste0(n, " Target")
+                                                        , colors = c()
+                                                        , mode = "lines" )
                             }
                             fig %>% layout( title = param
                                           , paper_bgcolor = "rgb(255,255,255)"
                                           , plot_bgcolor  = "rgb(229,229,229)"
-                                          , shapes = list(tgt)
                                           , xaxis = c( list(title = "Step")
                                                      , axis_defaults )
                                           , yaxis = c( list(title = param)
-                                                     , axis_defaults))
+                                                     , axis_defaults ))
                         })
                     })
                 }
@@ -322,8 +338,10 @@ server <- function(input, output, session) {
     output$plots_mdl <- renderUI({
         if ((! is.null(env$loss)) && (! is.null(env$reward))) {
             ld <- env$loss()
+            rd <- env$reward()
+
             mp <- c( lapply(unique(ld$Model), function(l) {paste0("loss_",l)})
-                   , "reward", "total" )
+                   , "reward_per_env", "total" )
 
             plot_list <- lapply(mp, function(p) { plotlyOutput(p) })
 
@@ -344,18 +362,14 @@ server <- function(input, output, session) {
                     t <- paste(param, "Loss")
                     output[[paste0("loss_", param)]] <- renderPlotly({
                         fig <- plot_ly()
-                        #for (eps in input$pick_episode) {
-                        for (eps in unique(ld$Episode)) {
-                            x <- ld[ ((ld$Episode == eps) & (ld$Model == param))
-                                   , ][["Iteration"]]
-                            y <- ld[ ((ld$Episode == eps) & (ld$Model == param))
-                                   , ][["Loss"]]
-                            n <- paste("Episode", eps)
-                            l <- list(shape = "linear")
-                            fig <- fig %>% add_lines( x = x, y = y
-                                                    , name = n
-                                                    , line = l )
-                        }
+                        x <- ld[(ld$Model == param), ][["Iteration"]]
+                        y <- ld[(ld$Model == param), ][["Loss"]]
+                        n <- param
+                        l <- list(shape = "linear")
+                        fig <- fig %>% add_lines( x = x, y = y
+                                                , name = n
+                                                , line = l )
+
                         fig %>% layout( title = param
                                       , paper_bgcolor = "rgb(255,255,255)"
                                       , plot_bgcolor  = "rgb(229,229,229)"
@@ -366,6 +380,54 @@ server <- function(input, output, session) {
                     })
                 })
             }
+
+            output[["reward_per_env"]] <- renderPlotly({
+                fig <- plot_ly()
+                x   <- unique(rd$Iteration)
+                avg <- aggregate(rd$Reward, list(rd$Iteration), FUN = mean)$x
+                hi  <- aggregate(rd$Reward, list(rd$Iteration), FUN = max)$x
+                lo  <- aggregate(rd$Reward, list(rd$Iteration), FUN = min)$x
+                la <- loess(avg~x, span = 0.3)
+                lh <- loess(hi~x, span = 0.3)
+                ll <- loess(lo~x, span = 0.3)
+
+                fig <- fig %>% add_trace( x = x, y = predict(lh)
+                                        , type = "scatter"
+                                        , mode = "lines"
+                                        , line = list(color = "transparent")
+                                        , showlegend = FALSE
+                                        , name = "High" )
+                fig <- fig %>% add_trace( x = x, y = predict(ll)
+                                        , type = "scatter"
+                                        , mode = "lines"
+                                        , fill = "tonexty"
+                                        , fillcolor='rgba(55,125,184,0.2)'
+                                        , alpha = 0.2
+                                        , opacity = 0.2
+                                        , line = list(color = "transparent")
+                                        , showlegend = FALSE
+                                        , name = "Low" )
+                fig <- fig %>% add_trace( x = x, y = predict(la) # avg
+                                        , type = "scatter"
+                                        , mode = "lines"
+                                        , line = list(color = "rgba(55,125,184,1.0)")
+                                        , showlegend = FALSE
+                                        , name = "Average" )
+                fig <- fig %>% add_trace( x = rd$Iteration, y = rd$Reward
+                                        , type = "scatter"
+                                        , mode = "markers"
+                                        , marker = list( color = "rgba(55,125,184,0.2)"
+                                                        , size = 2.0 )
+                                        , showlegend = FALSE
+                                        , name = "Actual" )
+                fig %>% layout( title = "Average Reward per Iteration"
+                              , paper_bgcolor = "rgb(255,255,255)"
+                              , plot_bgcolor  = "rgb(229,229,229)"
+                              , xaxis = c( list(title = "Iteration")
+                                         , axis_defaults )
+                              , yaxis = c( list(title = t)
+                                         , axis_defaults))
+            })
         }
     })
 }

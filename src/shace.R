@@ -1,6 +1,7 @@
 library("optparse")
 library("arrow")
 library("plotly")
+library("RColorBrewer")
 library("shiny")
 library("shinydashboard")
 library("shinyWidgets")
